@@ -18,7 +18,7 @@ test_function(3)
 #install.packages('shiny')
 library(shiny)
 
-#Code from Claude
+#Code from Claude for the app
 
 library(shiny)
 library(ggplot2)
