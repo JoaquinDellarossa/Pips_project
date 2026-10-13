@@ -1,7 +1,97 @@
 # Main file
 
+
+#Test code
+
 test_function = function(x) {
   return(x^2)
 }
 
 test_function(3)
+
+
+#Actual code
+
+
+#Install and load shiny
+
+#install.packages('shiny')
+library(shiny)
+
+#Code from Claude
+
+library(shiny)
+library(ggplot2)
+
+power_t <- function(n, d, alpha, type = "two.sample", alternative = "two.sided") {
+  df  <- if (type == "one.sample") n - 1 else 2 * (n - 1)
+  ncp <- if (type == "one.sample") d * sqrt(n) else d * sqrt(n / 2)
+  if (alternative == "two.sided") {
+    tcrit <- qt(1 - alpha / 2, df)
+    pow   <- pt(tcrit, df, ncp, lower.tail = FALSE) + pt(-tcrit, df, ncp)
+  } else {
+    tcrit <- qt(1 - alpha, df)
+    pow   <- pt(tcrit, df, ncp, lower.tail = FALSE)
+  }
+  list(df = df, ncp = ncp, tcrit = tcrit, power = pow)
+}
+
+ui <- fluidPage(
+  titlePanel("Sample size and power in a t-test"),
+  sidebarLayout(
+    sidebarPanel(
+      sliderInput("n", "Sample size (per group)", min = 3, max = 200, value = 20,
+                  step = 1, animate = animationOptions(interval = 300)),
+      sliderInput("d", "Effect size (Cohen's d)", min = 0, max = 2, value = 0.5, step = 0.05),
+      sliderInput("alpha", "Alpha", min = 0.001, max = 0.1, value = 0.05, step = 0.001),
+      radioButtons("type", "Test type", c("Two-sample" = "two.sample", "One-sample" = "one.sample")),
+      radioButtons("alt", "Alternative", c("Two-sided" = "two.sided", "One-sided" = "greater"))
+    ),
+    mainPanel(
+      plotOutput("distPlot"),
+      textOutput("powerText"),
+      plotOutput("powerCurve")
+    )
+  )
+)
+
+server <- function(input, output, session) {
+  
+  res <- reactive({
+    power_t(input$n, input$d, input$alpha, input$type, input$alt)
+  })
+  
+  output$distPlot <- renderPlot({
+    r <- res()
+    x <- seq(-6, r$ncp + 6, length.out = 1000)
+    dat <- data.frame(
+      x  = x,
+      h0 = dt(x, r$df),
+      h1 = dt(x, r$df, r$ncp)
+    )
+    reject <- if (input$alt == "two.sided") abs(dat$x) >= r$tcrit else dat$x >= r$tcrit
+    dat$power_area <- ifelse(reject, dat$h1, 0)
+    
+    ggplot(dat, aes(x)) +
+      geom_ribbon(aes(ymin = 0, ymax = power_area), fill = "steelblue", alpha = 0.4) +
+      geom_line(aes(y = h0, colour = "H0")) +
+      geom_line(aes(y = h1, colour = "H1")) +
+      geom_vline(xintercept = r$tcrit, linetype = "dashed") +
+      { if (input$alt == "two.sided") geom_vline(xintercept = -r$tcrit, linetype = "dashed") } +
+      labs(x = "t statistic", y = "Density", colour = NULL) +
+      theme_minimal()
+  })
+  
+  output$powerText <- renderText({
+    sprintf("Power = %.3f  (df = %d, ncp = %.2f, critical t = %.2f)",
+            res()$power, res()$df, res()$ncp, res()$tcrit)
+  })
+  
+  # Hint: build a data frame of power for n = 3:200 (use sapply or a loop over power_t),
+  # plot it as a line, and add a point at the current n.
+  output$powerCurve <- renderPlot({
+    # your code here
+  })
+}
+
+shinyApp(ui, server)
