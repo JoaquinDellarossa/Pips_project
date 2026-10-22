@@ -1,12 +1,13 @@
-# Pips_project
+# PowerLab
 
-This repository contains PowerLab, an interactive Shiny app for learning about statistical power and planning sample sizes. We created it for our group project in the Programming in Psychological Science (PIPS) course of the Research Master Psychology at the University of Amsterdam.
+PowerLab is an interactive Shiny app for learning and planning statistical power analyses.
 
-PowerLab lets users calculate prospective power for a one-sample t-test, an independent two-sample t-test, a one-way ANOVA, and a two-way between-subjects ANOVA. Users can see how sample size, effect size (Cohen's *d* or *f*) and significance level shape the sampling distributions under H₀ and H₁, follow power along a power curve, and find the sample size needed to reach a target power.
+Before collecting data, psychologists need to decide how many participants to include; with too few, a real effect can easily be missed. PowerLab lets students and researchers explore how sample size, effect size, and significance level determine statistical power, and calculates the sample size needed to reach a target power. Power is calculated analytically from the noncentral *t* and *F* distributions for:
 
-## Citation
-
-[Add the citation for your repository here.]
+- One-sample *t*-test
+- Independent two-sample *t*-test
+- One-way ANOVA
+- Two-way ANOVA (main effect A, main effect B, or the A × B interaction)
 
 ## Getting started
 
@@ -17,45 +18,43 @@ git clone https://github.com/JoaquinDellarossa/Pips_project.git
 cd Pips_project
 ```
 
-The app requires R; RStudio is recommended. Install the required packages:
+PowerLab requires R 4.4 or newer; RStudio is recommended. Install the packages needed to open an R Markdown document:
 
 ```r
-install.packages(c("shiny", "ggplot2"))
+install.packages(c("knitr", "rmarkdown"))
 ```
 
-Open RStudio in the `Pips_project` folder and start the app from the console:
-
-```r
-shiny::runApp("Power_Lab_with_ANOVA.R")
-```
-
-The app opens in your browser or in the RStudio viewer. To stop it, press Esc in the console or close the window.
+Open `main.rmd` in RStudio and run its chunks from top to bottom. The first chunk installs any missing app packages. The app chunk is not evaluated while knitting and should be run manually.
 
 ## Repository structure
 
 ```
 Pips_project/
-├── Power_Lab_with_ANOVA.R   # PowerLab Shiny app
-├── Power Lab.R              # [Describe this file]
-├── Pips_project.R           # [Describe this file]
+├── src/
+│   └── power_lab_app.R  # Shiny app: power calculations, user interface, and plots
+├── main.rmd             # Main deliverable: installs packages and runs the app
 └── README.md
 ```
 
-## Using the app
+## Using the project
 
-When PowerLab opens, a short four-step introduction explains why power matters and lets you choose a learning level. Choose **Skip introduction** to go straight to the lab.
+`main.rmd` explains the project and starts the app. The app can also be started outside the document:
 
-- **Beginner** shows the core inputs, the power result, the sampling distributions and the power curve.
-- **Intermediate** adds the degrees of freedom, noncentrality parameter and critical values, a plot of the α, β and power regions, and a sample-size comparison.
-- **Expert** adds a sensitivity analysis and downloads of an analysis report and a power-curve CSV.
+```bash
+Rscript -e "shiny::runApp('src/power_lab_app.R')"
+```
 
-You can change the level at any time; the calculations stay the same.
+Inside the app:
 
-In the lab, choose a test, set the sample size, effect size, α and target power, and read off the power, total N and required n. For the ANOVAs, *n* is the sample size per group (one-way) or per cell (two-way). Click any ⓘ button, or click directly on a curve, boundary or shaded area in the plots, for an explanation of what it represents.
+1. Follow the short introduction (why power matters, key concepts, the four tests, and an interactive preview), or skip it.
+2. Choose a learning level: *Beginner* shows the results and power curve; *Advanced* also shows degrees of freedom, the noncentrality parameter, critical values, and the sampling distributions. You can switch at any time.
+3. On the Explore page, choose a test, set the sample size, effect size (Cohen's *d* or *f*), α, and target power, and read off the power, total sample size, and required *n*.
+
+Every ⓘ button and most chart elements open a short explanation.
 
 ## Dependencies
 
-PowerLab uses Shiny for the interactive interface and ggplot2 (version 3.4.0 or newer) for the plots. Power is computed from the noncentral *t* and *F* distributions in base R.
+The app uses `shiny` for the interface and `ggplot2` (version 3.4.0 or newer) for the plots. `knitr` and `rmarkdown` support the main document. `main.rmd` installs `shiny` and `ggplot2` when they are missing.
 
 ## Reference
 

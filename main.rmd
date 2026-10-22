@@ -1,0 +1,65 @@
+---
+title: "PowerLab: an interactive power analysis app"
+output: html_document
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## About this project
+
+Before collecting data, psychologists need to decide how many participants to include. Too few, and a real effect can easily be missed. **PowerLab** is a Shiny app that helps students and researchers understand and plan this with a **statistical power analysis**.
+
+Power is calculated analytically from the noncentral *t* and *F* distributions for four designs with independent observations:
+
+- One-sample *t*-test
+- Independent two-sample *t*-test
+- One-way ANOVA
+- Two-way ANOVA (main effect A, main effect B, or the A × B interaction)
+
+Effect sizes are entered as Cohen's *d* (*t*-tests) or Cohen's *f* (ANOVA), following the conventions of Cohen (1988).
+
+All app code lives in `src/power_lab_app.R`. This document only installs the required packages and starts the app.
+
+## 1. Install packages
+
+The app needs `shiny` and `ggplot2`. This chunk installs them if they are missing.
+
+```{r packages}
+for (pkg in c("shiny", "ggplot2")) {
+  if (!requireNamespace(pkg, quietly = TRUE)) install.packages(pkg)
+}
+```
+
+## 2. Run the app
+
+Run the chunk below manually (it is not evaluated when knitting). The app opens in a new window; stop it with the stop button or `Esc` in the console.
+
+```{r run-app, eval = FALSE}
+shiny::runApp("src/power_lab_app.R")
+```
+
+## 3. Using the app
+
+**Introduction.** The app opens with a short guided introduction: why power matters, six key concepts (sample size, hypotheses, *p*-values, α, effect size, power), the four available tests, and an interactive preview showing how power grows with sample size. You can also skip straight to the lab.
+
+**Learning level.** Choose *Beginner* (results and power curve) or *Advanced* (additionally shows degrees of freedom, the noncentrality parameter, critical values, and the sampling distributions). You can switch at any time; both levels use the same calculations.
+
+**Explore page.**
+
+1.  **Choose your test** and, for *t*-tests, a two-sided or one-sided alternative.
+2.  **Set parameters** with the sliders or number boxes: sample size *n* (per group or cell), number of groups or factor levels (ANOVA), effect size, significance level α, and target power.
+3.  **Read your results:** the statistical power, the total number of participants, and the required *n* to reach your target power (searched up to *n* = 5,000).
+
+**Plots.**
+
+- *Power playground*: power as a function of sample size, with your target power and current design marked.
+- *Explore the distributions* (Advanced): the test-statistic distributions under H₀ and H₁, with the critical value and the power region shaded.
+- *Understand α, β and power* (Advanced): highlights the Type I error, Type II error, power, or correct-retention region.
+
+Every ⓘ button and most chart elements open a short explanation.
+
+## References
+
+Cohen, J. (1988). *Statistical power analysis for the behavioral sciences* (2nd ed.). Lawrence Erlbaum Associates.
