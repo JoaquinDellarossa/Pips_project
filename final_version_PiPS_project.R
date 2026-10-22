@@ -1,3 +1,6 @@
+# PowerLab: a Shiny app that teaches statistical power analysis.
+# Supports one-sample t, two-sample t, one-way ANOVA and two-way ANOVA. The user sets the test, n,
+# Effect size and alpha; the app shows power, the required n, and interactive plots.
 library(shiny)
 library(ggplot2)
 
@@ -5,12 +8,9 @@ library(ggplot2)
 is_f <- function(test) test %in% c('anova', 'anova2')
 
 # Power function
-# 'design' carries the extra design information for the ANOVA tests:
-#   one-way ANOVA ('anova'):   design = k (number of groups)
-#   two-way ANOVA ('anova2'):  design = list(a = levels of A, b = levels of B, effect = 'A' | 'B' | 'AB')
-# For ANOVA, n is the sample size per group (one-way) or per cell (two-way); d is Cohen's f.
 
 calc_power <- function(n, d, alpha, test, alternative, design = 3) {
+  # Anova
   if (is_f(test)) {
     if (test == 'anova') {
       cells <- design
@@ -22,6 +22,7 @@ calc_power <- function(n, d, alpha, test, alternative, design = 3) {
                     B  = design$b - 1,
                     AB = (design$a - 1) * (design$b - 1))
     }
+    
     N <- cells * n
     df2 <- N - cells
     lambda <- d^2 * N
@@ -33,6 +34,7 @@ calc_power <- function(n, d, alpha, test, alternative, design = 3) {
   # One and two-sample t-tests
   df <- if (test == 'one') n - 1 else 2 * n - 2
   delta <- if (test == 'one') d * sqrt(n) else d * sqrt(n / 2)
+  # Power = area of the H1 distribution beyond the critical value(s)
   if (alternative == 'two') {
     cut <- qt(1 - alpha / 2, df)
     power <- pt(-cut, df, ncp = delta) + pt(cut, df, ncp = delta, lower.tail = FALSE)
@@ -51,9 +53,8 @@ calc_power <- function(n, d, alpha, test, alternative, design = 3) {
 }
 
 # Density helpers and rejection region that work for both t and F tests
+
 dens0 <- function(x, r, test) if (is_f(test)) df(x, r$df1, r$df) else dt(x, r$df)
-# For negative effects, dt() with a negative ncp emits precision warnings; the mirror identity
-# dt(x, df, -δ) = dt(-x, df, δ) gives the same density without them.
 dens1 <- function(x, r, test) {
   if (is_f(test)) return(df(x, r$df1, r$df, ncp = r$delta))
   s <- if (r$delta < 0) -1 else 1
@@ -67,8 +68,7 @@ reject_region <- function(x, r, alternative, test) {
 }
 stat_label <- function(test) if (is_f(test)) 'F-statistic' else 't-statistic'
 
-# Upper y-limit for the density plots. An F density with 1 numerator df is infinite at 0,
-# so for F tests the very left edge of the curve is ignored when choosing the axis height.
+
 y_top <- function(dat, r, test) {
   keep <- if (is_f(test)) dat$x >= 0.1 * r$critical else rep(TRUE, nrow(dat))
   max(dat$h0[keep], dat$h1[keep], na.rm = TRUE) * 1.12
@@ -76,7 +76,7 @@ y_top <- function(dat, r, test) {
 
 
 
-# Help texts
+# Help texts.
 
 help_text <- list(
   test = c('Which test?', 'One-sample t-test: one mean vs a fixed value. Two-sample t-test: the means of two independent groups. One-way ANOVA: the means of three or more groups. Two-way ANOVA: two factors and their interaction. All assume independent, normally distributed observations; the group comparisons also assume equal variances and, in this app, equal group sizes.'),
@@ -110,19 +110,18 @@ help_text <- list(
 )
 
 
+# making info button
 info_button <- function(text, key) {
   div(class = 'labelrow', tags$label(text),
       actionButton(paste0('help_', key), 'ⓘ', class = 'info', title = paste('Learn about', text)))
 }
 
-# Card heading with an ⓘ button; the explanation lives in help_text[[key]] instead of on the page.
 card_title <- function(title, key) {
   div(class = 'card-title', h3(title),
       actionButton(paste0('help_', key), 'ⓘ', class = 'info', title = paste('About:', title)))
 }
 
-# A slider with a number box next to it. The box has the id '<id>_num'; the server keeps both in sync,
-# and all calculations keep reading the slider value (input[[id]]).
+# Making sliders
 slider_limits <- list(n = c(3, 200, 1), k = c(3, 10, 1), levels_a = c(2, 6, 1), levels_b = c(2, 6, 1),
                       d = c(-2, 2, .01), alpha = c(.001, .10, .001), target = c(.7, .95, .01))
 slider_box <- function(id, min, max, value, step) {
@@ -133,13 +132,11 @@ slider_box <- function(id, min, max, value, step) {
         `aria-label` = paste('Type a value for', id), .cssSelector = 'input')))
 }
 
-# UI
+# Defining the UI
 
 ui <- fluidPage(
   tags$head(
     tags$meta(name = 'viewport', content = 'width=device-width, initial-scale=1'),
-    # Charts on the Explore page stretch to the available height. Shiny only re-renders a plot when
-    # the window resizes, so tell it to re-measure whenever a chart box changes size.
     tags$script(HTML("
       $(document).on('shiny:connected', function() {
         if (!window.ResizeObserver) return;
@@ -150,6 +147,7 @@ ui <- fluidPage(
         });
         document.querySelectorAll('.plot-card .shiny-plot-output').forEach(function(el) { ro.observe(el); });
       });")),
+    # Custom dark-theme CSS
     tags$style(HTML(" 
       @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap');
       :root{--bg:#090f21;--panel:#121b32;--panel2:#182440;--edge:#2a3753;--text:#edf2ff;--muted:#a4b1ce;--violet:#9476ff;--pink:#ff729d;--blue:#58b8ff}
@@ -423,129 +421,133 @@ ui <- fluidPage(
       @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important}}
     "))
   ),
-   tabsetPanel(id = 'page', type = 'hidden',
-       tabPanel(title='Welcome',value='intro',
-         div(class='hero',div(class='eyebrow','WELCOME TO POWERLAB'),
-             h1('Statistics you can ',span('see.')),
-             p('Learn how researchers decide how many people to include in a study — and why some real effects are harder to detect than others.'),
-             p('Explore statistical concepts through examples, interactive charts, and explanations designed for students.'),
-             div(class='nav-actions',actionButton('intro_next1','Get started →',class='btn-start'),actionButton('intro_skip','Skip introduction',class='btn-secondary')))),
-       tabPanel(title='The question',value='why',
-         div(class='stepper',span(class='step-pill active','1 · Why power?'),span(class='step-pill','2 · Key concepts'),span(class='step-pill','3 · Tests'),span(class='step-pill','4 · Try it'),span(class='step-pill','5 · Your level')),
-         div(class='cardx',h2('Why does statistical power matter?'),
-             p(class='section-copy','Imagine you are testing whether a new study technique improves exam scores. The technique really works, but you only test a handful of students. You might not find convincing evidence of the improvement.'),
-             div(class='explain-callout',strong('The key idea: '),'A study can miss a real effect. Statistical power is the probability that a study will produce a statistically significant result when a specific real effect exists.'),
-             p(class='section-copy','PowerLab helps you understand how decisions such as the number of participants influence this probability.'),
-             div(class='nav-actions',actionButton('intro_back1','← Back',class='btn-secondary'),actionButton('intro_next2','Learn the key concepts →',class='btn-start')))),
-       tabPanel(title='Key concepts',value='concepts',
-         div(class='stepper',span(class='step-pill','1 · Why power?'),span(class='step-pill active','2 · Key concepts'),span(class='step-pill','3 · Tests'),span(class='step-pill','4 · Try it'),span(class='step-pill','5 · Your level')),
-         div(class='cardx',h2('The language of power analysis'),
-             p(class='section-copy','Every study starts with a question. These six concepts help you understand how researchers turn that question into a statistical test. Explore the cards in any order; each has a more detailed explanation.'),
-             div(class='learn-grid',
-                 div(class='learn-card',h4('Sample size (n)'),p('How many independent observations or participants are included in your study.'),actionButton('concept_n','Learn more ⓘ',class='btn-secondary')),
-                 div(class='learn-card',h4('Hypotheses (H₀ and H₁)'),p('H₀ describes a model without the tested effect; H₁ describes an effect or difference.'),actionButton('concept_hypothesis','Learn more ⓘ',class='btn-secondary')),
-                 div(class='learn-card',h4('Significance and p-values'),p('A statistical test evaluates how unusual your data would be under H₀. A statistically significant result is not necessarily important in practice.'),actionButton('concept_pvalue','Learn more ⓘ',class='btn-secondary')),
-                 div(class='learn-card',h4('Alpha (α)'),p('The chosen false-positive error rate for rejecting H₀ when it is true, often set at .05.'),actionButton('concept_alpha','Learn more ⓘ',class='btn-secondary')),
-                 div(class='learn-card',h4('Effect size (d or f)'),p('A standardized way to describe how large the effect is assumed to be. Different statistical tests use different measures.'),actionButton('concept_d','Learn more ⓘ',class='btn-secondary')),
-                 div(class='learn-card',h4('Power (1 − β)'),p('The chance that the chosen test is significant if the specific effect you assumed really exists.'),actionButton('concept_power','Learn more ⓘ',class='btn-secondary'))),
-             div(class='nav-actions',actionButton('concepts_back','← Back',class='btn-secondary'),actionButton('concepts_next','Discover the tests →',class='btn-start')))),
-       tabPanel(title='Tests explained',value='tests',
-         div(class='stepper',span(class='step-pill','1 · Why power?'),span(class='step-pill','2 · Key concepts'),span(class='step-pill active','3 · Tests'),span(class='step-pill','4 · Try it'),span(class='step-pill','5 · Your level')),
-         div(class='cardx',h2('Which statistical test fits your study?'),
-             p(class='section-copy','The right test depends on what you want to compare. Choose a card to open a clear example, learn when to use the test, and understand which study designs are supported. Repeated-measures designs are not included.'),
-             div(class='choice-grid',
-                 actionButton('learn_one',HTML('<span class="choice-name">One-sample t-test</span><span class="choice-description">Compare one group mean with a fixed reference value.</span>'),class='choice-card'),
-                 actionButton('learn_two',HTML('<span class="choice-name">Independent two-sample t-test</span><span class="choice-description">Compare two independent group means.</span>'),class='choice-card'),
-                 actionButton('learn_anova',HTML('<span class="choice-name">One-way ANOVA</span><span class="choice-description">Compare means across several independent groups.</span>'),class='choice-card'),
-                 actionButton('learn_anova2',HTML('<span class="choice-name">Two-way ANOVA</span><span class="choice-description">Investigate two factors and their interaction.</span>'),class='choice-card')),
-             div(class='nav-actions',actionButton('tests_back','← Back',class='btn-secondary'),actionButton('tests_next','Try changing sample size →',class='btn-start')))),
-       tabPanel(title='Interactive preview',value='try',
-         div(class='stepper',span(class='step-pill','1 · Why power?'),span(class='step-pill','2 · Key concepts'),span(class='step-pill','3 · Tests'),span(class='step-pill active','4 · Try it'),span(class='step-pill','5 · Your level')),
-         div(class='cardx',h2('Can a bigger study detect effects more reliably?'),
-             p(class='section-copy','Imagine comparing exam results from students using two different study methods, and assume the new method truly raises scores by half a standard deviation (Cohen’s d = 0.5). The groups are compared with a two-sided independent t-test at α = .05. Move the slider to add more students to each group; the assumed effect and the test settings stay the same.'),
-             div(class='intro-preview-slider',sliderInput('preview_n','Participants in each group',min=5,max=200,value=20,step=5,width='100%')),
-             div(class='metric',textOutput('preview_power')),
-             p(class='helper','This percentage is the chance that the test reports a significant result if the assumed difference really exists and the test assumptions hold.'),
-             plotOutput('preview_curve',height='260px'),
-             div(class='explain-callout',strong('What to notice: '),'For a fixed effect in the direction being tested, increasing the number of independent participants generally increases statistical power.'),
-             div(class='nav-actions',actionButton('intro_back2','← Back',class='btn-secondary'),actionButton('intro_next3','Choose your learning level →',class='btn-start')))),
-       tabPanel(title='Choose level',value='level',
-         div(class='stepper',span(class='step-pill','1 · Why power?'),span(class='step-pill','2 · Key concepts'),span(class='step-pill','3 · Tests'),span(class='step-pill','4 · Try it'),span(class='step-pill active','5 · Your level')),
-         div(class='cardx',h2('Choose your learning level'),
-             p(class='section-copy','Choose Beginner for a guided introduction or Advanced to explore distributions, error probabilities and detailed statistics. Both modes use the same statistical calculations, and you can switch at any time.'),
-             uiOutput('level_cards'),
-             div(class='nav-actions',actionButton('intro_back3','← Back',class='btn-secondary'),actionButton('intro_finish','Enter PowerLab →',class='btn-start')))),
+  # The app is one page with hidden tabs: the intro pages ('intro' to 'level') followed by the
+  # 'explore' dashboard. The server switches tabs when the Next/Back buttons are clicked.
+  tabsetPanel(id = 'page', type = 'hidden',
+              tabPanel(title='Welcome',value='intro',
+                       div(class='hero',div(class='eyebrow','WELCOME TO POWERLAB'),
+                           h1('Statistics you can ',span('see.')),
+                           p('Learn how researchers decide how many people to include in a study — and why some real effects are harder to detect than others.'),
+                           p('Explore statistical concepts through examples, interactive charts, and explanations designed for students.'),
+                           div(class='nav-actions',actionButton('intro_next1','Get started →',class='btn-start'),actionButton('intro_skip','Skip introduction',class='btn-secondary')))),
+              tabPanel(title='The question',value='why',
+                       div(class='stepper',span(class='step-pill active','1 · Why power?'),span(class='step-pill','2 · Key concepts'),span(class='step-pill','3 · Tests'),span(class='step-pill','4 · Try it'),span(class='step-pill','5 · Your level')),
+                       div(class='cardx',h2('Why does statistical power matter?'),
+                           p(class='section-copy','Imagine you are testing whether a new study technique improves exam scores. The technique really works, but you only test a handful of students. You might not find convincing evidence of the improvement.'),
+                           div(class='explain-callout',strong('The key idea: '),'A study can miss a real effect. Statistical power is the probability that a study will produce a statistically significant result when a specific real effect exists.'),
+                           p(class='section-copy','PowerLab helps you understand how decisions such as the number of participants influence this probability.'),
+                           div(class='nav-actions',actionButton('intro_back1','← Back',class='btn-secondary'),actionButton('intro_next2','Learn the key concepts →',class='btn-start')))),
+              tabPanel(title='Key concepts',value='concepts',
+                       div(class='stepper',span(class='step-pill','1 · Why power?'),span(class='step-pill active','2 · Key concepts'),span(class='step-pill','3 · Tests'),span(class='step-pill','4 · Try it'),span(class='step-pill','5 · Your level')),
+                       div(class='cardx',h2('The language of power analysis'),
+                           p(class='section-copy','Every study starts with a question. These six concepts help you understand how researchers turn that question into a statistical test. Explore the cards in any order; each has a more detailed explanation.'),
+                           div(class='learn-grid',
+                               div(class='learn-card',h4('Sample size (n)'),p('How many independent observations or participants are included in your study.'),actionButton('concept_n','Learn more ⓘ',class='btn-secondary')),
+                               div(class='learn-card',h4('Hypotheses (H₀ and H₁)'),p('H₀ describes a model without the tested effect; H₁ describes an effect or difference.'),actionButton('concept_hypothesis','Learn more ⓘ',class='btn-secondary')),
+                               div(class='learn-card',h4('Significance and p-values'),p('A statistical test evaluates how unusual your data would be under H₀. A statistically significant result is not necessarily important in practice.'),actionButton('concept_pvalue','Learn more ⓘ',class='btn-secondary')),
+                               div(class='learn-card',h4('Alpha (α)'),p('The chosen false-positive error rate for rejecting H₀ when it is true, often set at .05.'),actionButton('concept_alpha','Learn more ⓘ',class='btn-secondary')),
+                               div(class='learn-card',h4('Effect size (d or f)'),p('A standardized way to describe how large the effect is assumed to be. Different statistical tests use different measures.'),actionButton('concept_d','Learn more ⓘ',class='btn-secondary')),
+                               div(class='learn-card',h4('Power (1 − β)'),p('The chance that the chosen test is significant if the specific effect you assumed really exists.'),actionButton('concept_power','Learn more ⓘ',class='btn-secondary'))),
+                           div(class='nav-actions',actionButton('concepts_back','← Back',class='btn-secondary'),actionButton('concepts_next','Discover the tests →',class='btn-start')))),
+              tabPanel(title='Tests explained',value='tests',
+                       div(class='stepper',span(class='step-pill','1 · Why power?'),span(class='step-pill','2 · Key concepts'),span(class='step-pill active','3 · Tests'),span(class='step-pill','4 · Try it'),span(class='step-pill','5 · Your level')),
+                       div(class='cardx',h2('Which statistical test fits your study?'),
+                           p(class='section-copy','The right test depends on what you want to compare. Choose a card to open a clear example, learn when to use the test, and understand which study designs are supported. Repeated-measures designs are not included.'),
+                           div(class='choice-grid',
+                               actionButton('learn_one',HTML('<span class="choice-name">One-sample t-test</span><span class="choice-description">Compare one group mean with a fixed reference value.</span>'),class='choice-card'),
+                               actionButton('learn_two',HTML('<span class="choice-name">Independent two-sample t-test</span><span class="choice-description">Compare two independent group means.</span>'),class='choice-card'),
+                               actionButton('learn_anova',HTML('<span class="choice-name">One-way ANOVA</span><span class="choice-description">Compare means across several independent groups.</span>'),class='choice-card'),
+                               actionButton('learn_anova2',HTML('<span class="choice-name">Two-way ANOVA</span><span class="choice-description">Investigate two factors and their interaction.</span>'),class='choice-card')),
+                           div(class='nav-actions',actionButton('tests_back','← Back',class='btn-secondary'),actionButton('tests_next','Try changing sample size →',class='btn-start')))),
+              tabPanel(title='Interactive preview',value='try',
+                       div(class='stepper',span(class='step-pill','1 · Why power?'),span(class='step-pill','2 · Key concepts'),span(class='step-pill','3 · Tests'),span(class='step-pill active','4 · Try it'),span(class='step-pill','5 · Your level')),
+                       div(class='cardx',h2('Can a bigger study detect effects more reliably?'),
+                           p(class='section-copy','Imagine comparing exam results from students using two different study methods, and assume the new method truly raises scores by half a standard deviation (Cohen’s d = 0.5). The groups are compared with a two-sided independent t-test at α = .05. Move the slider to add more students to each group; the assumed effect and the test settings stay the same.'),
+                           div(class='intro-preview-slider',sliderInput('preview_n','Participants in each group',min=5,max=200,value=20,step=5,width='100%')),
+                           div(class='metric',textOutput('preview_power')),
+                           p(class='helper','This percentage is the chance that the test reports a significant result if the assumed difference really exists and the test assumptions hold.'),
+                           plotOutput('preview_curve',height='260px'),
+                           div(class='explain-callout',strong('What to notice: '),'For a fixed effect in the direction being tested, increasing the number of independent participants generally increases statistical power.'),
+                           div(class='nav-actions',actionButton('intro_back2','← Back',class='btn-secondary'),actionButton('intro_next3','Choose your learning level →',class='btn-start')))),
+              tabPanel(title='Choose level',value='level',
+                       div(class='stepper',span(class='step-pill','1 · Why power?'),span(class='step-pill','2 · Key concepts'),span(class='step-pill','3 · Tests'),span(class='step-pill','4 · Try it'),span(class='step-pill active','5 · Your level')),
+                       div(class='cardx',h2('Choose your learning level'),
+                           p(class='section-copy','Choose Beginner for a guided introduction or Advanced to explore distributions, error probabilities and detailed statistics. Both modes use the same statistical calculations, and you can switch at any time.'),
+                           uiOutput('level_cards'),
+                           div(class='nav-actions',actionButton('intro_back3','← Back',class='btn-secondary'),actionButton('intro_finish','Enter PowerLab →',class='btn-start')))),
               # Explore page: one-screen dashboard. Parameters on the left, results and charts on the right,
               # so every change is visible immediately. Each slider has a linked number box (see slider_box()).
               tabPanel(title = 'Explore', value = 'explore',
-                div(class='lab-page',
-                       div(class='lab-hero',div(class='lab-hero-content',
-                         div(div(class='lab-eyebrow','YOUR INTERACTIVE STATISTICS LAB'),
-                             div(class='brand',HTML('▥ Power<span>Lab</span>'))),
-                         div(class='lab-hero-actions',uiOutput('mode_switch'),
-                             actionButton('home','← Introduction',class='btn-secondary')))),
-                       div(style='display:none',selectInput('mode',NULL,choices=c('Beginner'='beginner','Advanced'='advanced'),selected='beginner')),
-                       div(class='lab-main',
-                         div(class='lab-left',
-                           div(class='cardx lab-testcard',
-                               card_title('① Choose your test','test'),
-                               uiOutput('test_cards'),
-                               div(style='display:none',radioButtons('test',NULL,c('One-sample t-test'='one','Independent two-sample t-test'='two', 'One-way ANOVA (F test)'='anova', 'Two-way ANOVA (F test)'='anova2'),selected='two')),
-                               conditionalPanel(condition="input.test != 'anova' && input.test != 'anova2'",
-                                                info_button('Alternative hypothesis','alternative'),
-                                                radioButtons('alternative',NULL,c('Two-sided'='two','Greater'='greater','Less'='less'),selected='two',inline=TRUE))),
-                           div(class='cardx lab-params',h3('② Set parameters'),
-                               info_button('Sample size (n)','n'),
-                               slider_box('n',3,200,30,1),
-                               conditionalPanel(condition="input.test == 'anova'",
-                                                info_button('Number of groups (k)','k'),
-                                                slider_box('k',3,10,3,1)),
-                               conditionalPanel(condition="input.test == 'anova2'",
-                                                div(class='param-pair',
-                                                    div(info_button('Levels of A','levels_a'),slider_box('levels_a',2,6,2,1)),
-                                                    div(info_button('Levels of B','levels_b'),slider_box('levels_b',2,6,2,1))),
-                                                info_button('Effect to test','effect'),
-                                                radioButtons('effect',NULL,c('Main A'='A','Main B'='B','A × B'='AB'),selected='A',inline=TRUE)),
-                               uiOutput('effect_label'),
-                               slider_box('d',-2,2,0.5,.01),
-                               info_button('Significance level (α)','alpha'),
-                               slider_box('alpha',.001,.10,.05,.001),
-                               info_button('Target power','target'),
-                               slider_box('target',.7,.95,.8,.01),
-                               uiOutput('direction_warning'))),
-                         div(class='lab-right',
-                           div(class='cardx lab-results',
-                               div(class='card-title',h3('③ Your results'),
-                                   actionButton('help_interpretation','What does this mean? ⓘ',class='btn-explain')),
-                               div(class='metric-grid',
-                                   div(info_button('Statistical power','power'),div(class='metric',textOutput('power',inline=TRUE))),
-                                   div(info_button('Total participants','total'),div(class='metric',textOutput('total',inline=TRUE))),
-                                   div(info_button('Required n','required'),div(class='metric',textOutput('required',inline=TRUE)))),
-                               conditionalPanel(condition="input.mode != 'beginner'",
-                                   div(class='lab-details',
-                                       div(info_button('Degrees of freedom','df'),textOutput('df')),
-                                       div(info_button('Noncentrality parameter','ncp'),textOutput('ncp')),
-                                       div(info_button('Critical value(s)','critical'),textOutput('critical'))))),
-                           div(class='lab-plots',
-                             conditionalPanel(condition="input.mode != 'beginner'",class='dist-stack',
-                               div(class='cardx plot-card',card_title('Explore the distributions','dist_note'),
-                                   div(class='chart-key',actionButton('key_null',HTML('<span style="color:#58b8ff">●</span> H₀')),
-                                       actionButton('key_alt',HTML('<span style="color:#ff729d">●</span> H₁')),
-                                       actionButton('key_boundary','┊ Critical'),
-                                       actionButton('key_region',HTML('<span style="color:#976cff">■</span> Power'))),
-                                   plotOutput('distribution',height='260px',click=clickOpts(id='dist_click',clip=TRUE))),
-                               div(class='cardx plot-card',card_title('Understand α, β and power','errors_note'),
-                                   radioButtons('error_region',NULL,choices=c('Power (1 − β)'='power','Type II (β)'='beta','Type I (α)'='alpha','Correct (1 − α)'='correct'),selected='power',inline=TRUE),
-                                   plotOutput('error_plot',height='260px'),div(class='error-caption',textOutput('error_caption')))),
-                             div(class='curve-cell',
-                               div(class='cardx plot-card',card_title('Power playground','curve_note'),
-                                   div(class='chart-key',actionButton('key_curve',HTML('<span style="color:#a288ff">↗</span> Power curve')),
-                                       actionButton('key_targetline',HTML('<span style="color:#ffb776">┄</span> Target')),
-                                       actionButton('key_current',HTML('<span style="color:#a288ff">●</span> Your design'))),
-                                   plotOutput('curve',height='340px',click=clickOpts(id='curve_click',clip=TRUE))))))))
+                       div(class='lab-page',
+                           div(class='lab-hero',div(class='lab-hero-content',
+                                                    div(div(class='lab-eyebrow','YOUR INTERACTIVE STATISTICS LAB'),
+                                                        div(class='brand',HTML('▥ Power<span>Lab</span>'))),
+                                                    div(class='lab-hero-actions',uiOutput('mode_switch'),
+                                                        actionButton('home','← Introduction',class='btn-secondary')))),
+                           div(style='display:none',selectInput('mode',NULL,choices=c('Beginner'='beginner','Advanced'='advanced'),selected='beginner')),
+                           div(class='lab-main',
+                               div(class='lab-left',
+                                   div(class='cardx lab-testcard',
+                                       card_title('① Choose your test','test'),
+                                       uiOutput('test_cards'),
+                                       div(style='display:none',radioButtons('test',NULL,c('One-sample t-test'='one','Independent two-sample t-test'='two', 'One-way ANOVA (F test)'='anova', 'Two-way ANOVA (F test)'='anova2'),selected='two')),
+                                       conditionalPanel(condition="input.test != 'anova' && input.test != 'anova2'",
+                                                        info_button('Alternative hypothesis','alternative'),
+                                                        radioButtons('alternative',NULL,c('Two-sided'='two','Greater'='greater','Less'='less'),selected='two',inline=TRUE))),
+                                   div(class='cardx lab-params',h3('② Set parameters'),
+                                       info_button('Sample size (n)','n'),
+                                       slider_box('n',3,200,30,1),
+                                       conditionalPanel(condition="input.test == 'anova'",
+                                                        info_button('Number of groups (k)','k'),
+                                                        slider_box('k',3,10,3,1)),
+                                       conditionalPanel(condition="input.test == 'anova2'",
+                                                        div(class='param-pair',
+                                                            div(info_button('Levels of A','levels_a'),slider_box('levels_a',2,6,2,1)),
+                                                            div(info_button('Levels of B','levels_b'),slider_box('levels_b',2,6,2,1))),
+                                                        info_button('Effect to test','effect'),
+                                                        radioButtons('effect',NULL,c('Main A'='A','Main B'='B','A × B'='AB'),selected='A',inline=TRUE)),
+                                       uiOutput('effect_label'),
+                                       slider_box('d',-2,2,0.5,.01),
+                                       info_button('Significance level (α)','alpha'),
+                                       slider_box('alpha',.001,.10,.05,.001),
+                                       info_button('Target power','target'),
+                                       slider_box('target',.7,.95,.8,.01),
+                                       uiOutput('direction_warning'))),
+                               div(class='lab-right',
+                                   div(class='cardx lab-results',
+                                       div(class='card-title',h3('③ Your results'),
+                                           actionButton('help_interpretation','What does this mean? ⓘ',class='btn-explain')),
+                                       div(class='metric-grid',
+                                           div(info_button('Statistical power','power'),div(class='metric',textOutput('power',inline=TRUE))),
+                                           div(info_button('Total participants','total'),div(class='metric',textOutput('total',inline=TRUE))),
+                                           div(info_button('Required n','required'),div(class='metric',textOutput('required',inline=TRUE)))),
+                                       conditionalPanel(condition="input.mode != 'beginner'",
+                                                        div(class='lab-details',
+                                                            div(info_button('Degrees of freedom','df'),textOutput('df')),
+                                                            div(info_button('Noncentrality parameter','ncp'),textOutput('ncp')),
+                                                            div(info_button('Critical value(s)','critical'),textOutput('critical'))))),
+                                   div(class='lab-plots',
+                                       conditionalPanel(condition="input.mode != 'beginner'",class='dist-stack',
+                                                        div(class='cardx plot-card',card_title('Explore the distributions','dist_note'),
+                                                            div(class='chart-key',actionButton('key_null',HTML('<span style="color:#58b8ff">●</span> H₀')),
+                                                                actionButton('key_alt',HTML('<span style="color:#ff729d">●</span> H₁')),
+                                                                actionButton('key_boundary','┊ Critical'),
+                                                                actionButton('key_region',HTML('<span style="color:#976cff">■</span> Power'))),
+                                                            plotOutput('distribution',height='260px',click=clickOpts(id='dist_click',clip=TRUE))),
+                                                        div(class='cardx plot-card',card_title('Understand α, β and power','errors_note'),
+                                                            radioButtons('error_region',NULL,choices=c('Power (1 − β)'='power','Type II (β)'='beta','Type I (α)'='alpha','Correct (1 − α)'='correct'),selected='power',inline=TRUE),
+                                                            plotOutput('error_plot',height='260px'),div(class='error-caption',textOutput('error_caption')))),
+                                       div(class='curve-cell',
+                                           div(class='cardx plot-card',card_title('Power playground','curve_note'),
+                                               div(class='chart-key',actionButton('key_curve',HTML('<span style="color:#a288ff">↗</span> Power curve')),
+                                                   actionButton('key_targetline',HTML('<span style="color:#ffb776">┄</span> Target')),
+                                                   actionButton('key_current',HTML('<span style="color:#a288ff">●</span> Your design'))),
+                                               plotOutput('curve',height='340px',click=clickOpts(id='curve_click',clip=TRUE))))))))
               )
   )
 )
+
+# Making server
 
 server <- function(input, output, session) {
   # Test-specific teaching content. Designs here always involve independent observations.
@@ -561,14 +563,15 @@ server <- function(input, output, session) {
       list(id='beginner',title='🌱 Beginner',description='Learn the essentials with guided explanations and a clear power curve.'),
       list(id='advanced',title='🔬 Advanced',description='Explore sampling distributions, error probabilities, degrees of freedom and critical values.')
     ),function(z) actionButton(paste0('select_',z$id),
-      HTML(paste0('<span class="choice-name">',z$title,'</span><span class="choice-description">',z$description,'</span>')),
-      class=paste('choice-card',if(level_choice()==z$id)'selected' else ''))))
+                               HTML(paste0('<span class="choice-name">',z$title,'</span><span class="choice-description">',z$description,'</span>')),
+                               class=paste('choice-card',if(level_choice()==z$id)'selected' else ''))))
   })
+  # Clicking a level card stores the chosen level
   for (lev in c('beginner','advanced')) local({l<-lev;observeEvent(input[[paste0('select_',l)]],level_choice(l))})
   output$mode_switch <- renderUI({
     div(class='level-switch',role='group',`aria-label`='Learning level',
-      actionButton('mode_beginner','Beginner',class=if(input$mode=='beginner')'active' else ''),
-      actionButton('mode_advanced','Advanced',class=if(input$mode=='advanced')'active' else ''))
+        actionButton('mode_beginner','Beginner',class=if(input$mode=='beginner')'active' else ''),
+        actionButton('mode_advanced','Advanced',class=if(input$mode=='advanced')'active' else ''))
   })
   for (lev in c('beginner','advanced')) local({l<-lev;observeEvent(input[[paste0('mode_',l)]],{
     updateSelectInput(session,'mode',selected=l)
@@ -582,6 +585,7 @@ server <- function(input, output, session) {
           actionButton(paste0('info_test_',id),'ⓘ',class='info test-info-button',title=paste('Learn about',z$title)))
     }))
   })
+  # Test cards: select a test, open its description pop-up, or confirm it with 'Choose this test'
   for (tt in names(test_info)) local({t<-tt;observeEvent(input[[paste0('choose_',t)]],updateRadioButtons(session,'test',selected=t));observeEvent(input[[paste0('learn_',t)]],showModal(modalDialog(title=test_info[[t]]$title,p(test_info[[t]]$detail),easyClose=TRUE,footer=div(class='test-modal-actions',modalButton('Close'),actionButton(paste0('use_',t),'Choose this test',class='btn-primary')))));observeEvent(input[[paste0('use_',t)]],{updateRadioButtons(session,'test',selected=t);removeModal()})})
   for (tt in names(test_info)) local({t<-tt;observeEvent(input[[paste0('info_test_',t)]],showModal(modalDialog(title=test_info[[t]]$title,p(test_info[[t]]$detail),easyClose=TRUE,footer=modalButton('Close'))))})
   output$effect_label <- renderUI(info_button(if(is_f(input$test))'Effect size (Cohen’s f)' else 'Effect size (Cohen’s d)','d'))
@@ -589,8 +593,9 @@ server <- function(input, output, session) {
   observeEvent(input$concepts_next,updateTabsetPanel(session,'page',selected='tests'))
   observeEvent(input$tests_back,updateTabsetPanel(session,'page',selected='concepts'))
   observeEvent(input$tests_next,updateTabsetPanel(session,'page',selected='try'))
+  # Key-concept cards open the matching help pop-up
   for (k in c('n','hypothesis','pvalue','alpha','d','power')) local({key<-k;observeEvent(input[[paste0('concept_',key)]],{z<-help_text[[key]];showModal(modalDialog(title=z[[1]],p(z[[2]]),easyClose=TRUE,footer=modalButton('Got it')))})})
-
+  
   # Switch the effect-size slider between Cohen's d (t-tests) and Cohen's f (ANOVA)
   was_f <- reactiveVal(FALSE)
   observeEvent(input$test, {
@@ -598,15 +603,11 @@ server <- function(input, output, session) {
     if (is_a != was_f()) {
       if (is_a) updateSliderInput(session,'d',min=0,max=1,value=0.25,step=.01)
       else updateSliderInput(session,'d',min=-2,max=2,value=0.5,step=.01)
-      # Update the box's value together with its range; a range-only update would make the box
-      # re-send its old value, which would then override the slider.
       updateNumericInput(session,'d_num',value=if(is_a)0.25 else 0.5,min=if(is_a)0 else -2,max=if(is_a)1 else 2)
       was_f(is_a)
     }
   })
-
-  # Keep each slider and its number box in sync. Typing is debounced so a value like 120 is not
-  # applied digit by digit; typed values are snapped to the slider's range and step.
+  
   for (id in names(slider_limits)) local({
     s <- id; b <- paste0(id,'_num')
     typed <- debounce(reactive(input[[b]]), 600)
@@ -625,6 +626,7 @@ server <- function(input, output, session) {
     })
   })
   
+  # Navigation buttons
   observeEvent(input$intro_next1,updateTabsetPanel(session,'page',selected='why'))
   observeEvent(input$intro_next2,updateTabsetPanel(session,'page',selected='concepts'))
   observeEvent(input$intro_next3,updateTabsetPanel(session,'page',selected='level'))
@@ -633,9 +635,11 @@ server <- function(input, output, session) {
   observeEvent(input$intro_back3,updateTabsetPanel(session,'page',selected='try'))
   observeEvent(input$intro_skip,{updateSelectInput(session,'mode',selected='beginner');updateTabsetPanel(session,'page',selected='explore')})
   observeEvent(input$intro_finish,{updateSelectInput(session,'mode',selected=level_choice());updateTabsetPanel(session,'page',selected='explore')})
+  # Intro preview: power of a fixed two-sided t-test (d = 0.5, alpha = .05) as n changes
   output$preview_power <- renderText(sprintf('%.1f%% power',100*calc_power(input$preview_n,.5,.05,'two','two')$power))
   output$preview_curve <- renderPlot({dd <- data.frame(n=5:200,power=vapply(5:200,function(n)calc_power(n,.5,.05,'two','two')$power,numeric(1)));ggplot(dd,aes(n,power))+geom_line(color='#aa8dff',linewidth=1.3)+geom_point(data=subset(dd,n==input$preview_n),color='#ff729d',size=4)+labs(x='Participants per group',y='Power')+theme_minimal(base_size=15)+theme(text=element_text(size=15,color='#dce5f9'),axis.text=element_text(size=13,color='#dce5f9'),plot.background=element_rect(fill='#121b32',color=NA),panel.background=element_rect(fill='#121b32',color=NA))},bg='#121b32')
   observeEvent(input$home,updateTabsetPanel(session,'page',selected='intro'))
+  # Opens the help_text entry for 'key' in a pop-up, with an optional extra line
   show_explanation <- function(key, extra = NULL) {
     item <- help_text[[key]]
     if (is.null(item)) return(invisible(NULL))
@@ -643,6 +647,7 @@ server <- function(input, output, session) {
                           if (!is.null(extra)) p(tags$strong(extra)),
                           easyClose=TRUE,footer=modalButton('Got it')))
   }
+  # Connect every ⓘ button and chart-key button to its pop-up
   for (key in c('test','alternative','n','k','levels_a','levels_b','effect','d','alpha','target','power','total','required','df','ncp','critical','dist_note','errors_note','curve_note')) {
     local({ k <- key; observeEvent(input[[paste0('help_',k)]],show_explanation(k)) })
   }
@@ -651,14 +656,15 @@ server <- function(input, output, session) {
   }
   # The plain-language interpretation now opens in a pop-up; it updates live if parameters change.
   observeEvent(input$help_interpretation,
-    showModal(modalDialog(title='What do your results mean?',textOutput('interpretation'),
-                          easyClose=TRUE,footer=modalButton('Got it'))))
+               showModal(modalDialog(title='What do your results mean?',textOutput('interpretation'),
+                                     easyClose=TRUE,footer=modalButton('Got it'))))
   
   # Extra design information passed to calc_power(): k for one-way, list(a, b, effect) for two-way
   design <- reactive(if (input$test == 'anova2') list(a = input$levels_a, b = input$levels_b, effect = input$effect) else input$k)
   # Wording for the sampling unit
   unit <- reactive(if (input$test == 'anova2') 'cell' else 'group')
   
+  # Main calculations
   result <- reactive(calc_power(input$n,input$d,input$alpha,input$test,input$alternative,design()))
   output$power <- renderText(sprintf('%.1f%%',100*result()$power))
   output$total <- renderText(result()$total)
@@ -668,9 +674,11 @@ server <- function(input, output, session) {
   
   # Search up to n = 5000 to avoid silently treating 200 as a universal cap.
   recommendation <- reactive({
+    # No meaningful n exists if a one-sided hypothesis points opposite to the sign of d
     if (!is_f(input$test) && ((input$alternative=='greater' && input$d<0) || (input$alternative=='less' && input$d>0))) return(NA_integer_)
     # pt() warns about reduced precision for very large noncentrality values; results remain accurate here.
     vals <- suppressWarnings(vapply(3:5000,function(n) calc_power(n,input$d,input$alpha,input$test,input$alternative,design())$power,numeric(1)))
+    # Smallest n whose power reaches the target (index + 2 converts back to n, since the search starts at 3)
     hit <- which(vals >= input$target)
     if (length(hit)==0) NA_integer_ else hit[1]+2L
   })
@@ -679,6 +687,7 @@ server <- function(input, output, session) {
   output$required <- renderText({
     if (is.na(recommendation()) && direction_conflict()) 'Direction mismatch' else if (is.na(recommendation())) '> 5,000' else if (input$test!='one') paste0(recommendation(),' / ',unit()) else as.character(recommendation())
   })
+  # Plain-language summary shown in the 'What does this mean?' pop-up
   output$interpretation <- renderText({
     r <- result(); req <- recommendation()
     eff <- if(is_f(input$test)) 'f' else 'd'
@@ -691,6 +700,8 @@ server <- function(input, output, session) {
            recommendation_msg)
   })
   
+  # Densities of H0 and H1 over a grid of test-statistic values; 'shaded' = H1 density inside the
+  # rejection region (this area is the power)
   dist_data <- reactive({
     r <- result(); tst <- input$test
     xx <- if (is_f(tst)) seq(0.001, max(qf(.999,r$df1,r$df), r$critical*1.2, qf(.999,r$df1,r$df,ncp=r$delta)), length.out=2401)
@@ -700,6 +711,7 @@ server <- function(input, output, session) {
                shaded=ifelse(reject_region(xx,r,input$alternative,tst),h1,0))
   })
   output$distribution <- renderPlot({
+    # H0 (blue), H1 (pink), critical value(s) dashed, power shaded
     dat <- dist_data(); r <- result()
     ggplot(dat,aes(x=x))+
       geom_area(aes(y=shaded),fill='#976cff',alpha=.48)+
@@ -713,6 +725,7 @@ server <- function(input, output, session) {
             panel.grid=element_line(color='#2b3853'),panel.grid.minor=element_blank(),
             plot.background=element_rect(fill='#121b32',color=NA),panel.background=element_rect(fill='#121b32',color=NA))
   },bg='#121b32')
+  # Clicking the plot explains the nearest element (curve, critical line or shaded area)
   observeEvent(input$dist_click,{
     click <- input$dist_click; dat <- dist_data(); r <- result()
     if(is.null(click$x)||is.null(click$y)) return()
@@ -733,11 +746,13 @@ server <- function(input, output, session) {
     req_n <- recommendation()
     if (is.na(req_n) || req_n <= 180) 200L else as.integer(min(5000, ceiling(req_n * 1.15)))
   })
+  # Power for every n on the power-curve x-axis
   curve_data <- reactive({
     nn <- 3:curve_max()
     data.frame(n=nn,power=suppressWarnings(vapply(nn,function(n)calc_power(n,input$d,input$alpha,input$test,input$alternative,design())$power,numeric(1))))
   })
   output$curve <- renderPlot({
+    # Power curve (purple), target power (dashed line) and the current design (dot)
     dat <- curve_data()
     ggplot(dat,aes(n,power))+
       geom_hline(yintercept=input$target,color='#ffb776',linetype='dashed',linewidth=.75)+
@@ -751,12 +766,14 @@ server <- function(input, output, session) {
             plot.background=element_rect(fill='#121b32',color=NA),panel.background=element_rect(fill='#121b32',color=NA))
   },bg='#121b32')
   output$error_plot <- renderPlot({
+    # Shade the area chosen by the radio buttons: alpha, 1 - alpha, beta or power
     dat <- dist_data(); r <- result(); a <- input$error_region
     reject <- reject_region(dat$x,r,input$alternative,input$test)
     dat$region <- if(a=='alpha') ifelse(reject,dat$h0,0) else if(a=='correct') ifelse(!reject,dat$h0,0) else if(a=='beta') ifelse(!reject,dat$h1,0) else ifelse(reject,dat$h1,0)
     ggplot(dat,aes(x))+geom_area(aes(y=region),fill='#9c79ff',alpha=.55)+geom_line(aes(y=h0),color='#58b8ff',linewidth=1)+geom_line(aes(y=h1),color='#ff729d',linewidth=1)+geom_vline(xintercept=r$critical,linetype='dashed',color='#e0e5ff')+labs(x=stat_label(input$test),y='Density')+coord_cartesian(ylim=c(0,y_top(dat,r,input$test)))+theme_minimal(base_size=15)+theme(text=element_text(size=15,color='#dce5f9'),axis.text=element_text(size=13,color='#dce5f9'),panel.grid=element_line(color='#2b3853'),plot.background=element_rect(fill='#121b32',color=NA),panel.background=element_rect(fill='#121b32',color=NA))
   },bg='#121b32')
   output$error_caption <- renderText({r <- result();switch(input$error_region,alpha=sprintf('Type I error: %.1f%% of null-distribution area is in the rejection region.',100*input$alpha),correct=sprintf('No Type I error under H₀: %.1f%%.',100*(1-input$alpha)),beta=sprintf('Type II error at the specified effect: %.1f%%.',100*(1-r$power)),power=sprintf('Power at the specified effect: %.1f%%.',100*r$power))})
+  # Clicking the power curve explains the dot, the target line, or the predicted power at that n
   observeEvent(input$curve_click,{
     click <- input$curve_click
     if(is.null(click$x)||is.null(click$y)) return()
